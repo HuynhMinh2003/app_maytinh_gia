@@ -6,14 +6,14 @@ class CalculatorService {
   String input = '0';
   String result = '';
 
-  void pressKey(String value) {
+  Future<void> pressKey(String value) async {
     if (input == '0') {
       input = value;
     } else {
       input += value;
     }
-    result = '';
   }
+
 
   void clear() {
     input = '0';

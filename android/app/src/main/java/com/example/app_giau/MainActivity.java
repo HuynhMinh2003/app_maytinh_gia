@@ -19,6 +19,8 @@ import io.flutter.plugin.common.MethodChannel;
 
 import java.util.Set;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 public class MainActivity extends FlutterActivity {
     private static final String CHANNEL = "com.example.vault/channel";
@@ -37,6 +39,7 @@ public class MainActivity extends FlutterActivity {
     private AnhYeuThich favoriteManager1;
     private RateApp rateApp;
     private AppInfo appInfo;
+    private FolderManager folderManager;
 
     // Biến lưu MethodChannel.Result để trả về cho Flutter sau khi chọn ảnh/video
     private MethodChannel.Result pendingPickImageResult;
@@ -81,6 +84,7 @@ public class MainActivity extends FlutterActivity {
         favoriteManager1 = new AnhYeuThich(this);
         rateApp = new RateApp(this); // ✅ Thêm
         appInfo = new AppInfo(this);
+        folderManager = new FolderManager(this);
 
         new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), CHANNEL)
                 .setMethodCallHandler((call, result) -> {
@@ -128,11 +132,12 @@ public class MainActivity extends FlutterActivity {
                             boolean success = chonAnh.hideImage(imageUri);
                             result.success(success);
                             break;
-                        case "restoreImage":
-                            String path = call.argument("path");
-                            boolean restored = chonAnh.restoreImage(path);
-                            result.success(restored);
-                            break;
+//                        case "restoreImage":
+//                            String path = call.argument("path");
+//                            boolean restored = chonAnh.restoreImage(path);
+//                            result.success(restored);
+//                            break;
+
                         case "pickImageUri":
                             pendingPickImageResult = result;
                             Intent intentImg = new Intent(Intent.ACTION_PICK, android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
@@ -149,11 +154,6 @@ public class MainActivity extends FlutterActivity {
                             Uri videoUri = Uri.parse(uriVideoString);
                             boolean videoSuccess = chonVideo.hideVideo(videoUri);
                             result.success(videoSuccess);
-                            break;
-                        case "restoreVideo":
-                            String videoPath = call.argument("path");
-                            boolean videoRestored = chonVideo.restoreVideo(videoPath);
-                            result.success(videoRestored);
                             break;
                         case "pickVideoUri":
                             pendingPickVideoResult = result;
@@ -228,6 +228,103 @@ public class MainActivity extends FlutterActivity {
                             result.success(savedLang);
                             break;
 
+                        case "createFolder": {
+                            String name = call.argument("folderName");
+                            boolean created = folderManager.createFolder(name);
+                            result.success(created);
+                            break;
+                        }
+                        case "getFilesInFolder": {
+                            String folderId = call.argument("folderId");
+                            List<String> files = folderManager.getFilesInFolder(folderId);
+                            result.success(files);
+                            break;
+                        }
+                        case "deleteFile": {
+                            String path1 = call.argument("filePath");
+                            boolean deleted = folderManager.deleteFile(path1);
+                            result.success(deleted);
+                            break;
+                        }
+
+                        case "getFolders": { // ✅ giống Dart
+                            List<String> list = folderManager.getFoldersJson();
+                            result.success(list);
+                            break;
+                        }
+
+                        case "pickAndHideFile": {
+                            String folderId = call.argument("folderId");
+                            folderManager.pickFile(this, folderId, result); // dùng lại logic pickFile
+                            break;
+                        }
+
+                        case "restoreFile":
+                            String filePath = call.argument("filePath");
+                            boolean restoreSuccess = folderManager.restoreFile(filePath);
+                            result.success(restoreSuccess);
+                            break;
+
+                        case "moveImageToFolder": {
+                            String imagePath = call.argument("imagePath");
+                            String folderId = call.argument("folderId");
+                            boolean moveSuccess = folderManager.moveImageToFolder(imagePath, folderId);
+                            result.success(moveSuccess);
+                            break;
+                        }
+
+                        case "moveVideoToFolder": {
+                            String videoPath1 = call.argument("videoPath");
+                            String folderId = call.argument("folderId");
+                            boolean moveSuccess = folderManager.moveVideoToFolder(videoPath1, folderId);
+                            result.success(moveSuccess);
+                            break;
+                        }
+
+                        // Bổ sung renameFolder
+                        case "renameFolder":
+                            String folderIdToRename = call.argument("folderId");
+                            String newName = call.argument("newName");
+                            boolean renamed = folderManager.renameFolder(folderIdToRename, newName);
+                            result.success(renamed);
+                            break;
+
+                        case "deleteImageInApp": {
+                            String path = call.argument("path");
+                            boolean deletedResult = chonAnh.deleteImageInApp(path);
+                            result.success(deletedResult);
+                            break;
+                        }
+
+                        case "copyImageToGallery": {
+                            String path = call.argument("path");
+                            boolean copiedResult = chonAnh.copyImageToGallery(path);
+                            result.success(copiedResult);
+                            break;
+                        }
+
+                        case "deleteVideoInApp": {
+                            String path = call.argument("path");
+                            boolean deletedResult1 = chonVideo.deleteVideoInApp(path);
+                            result.success(deletedResult1);
+                            break;
+                        }
+                        case "copyVideoToGallery": {
+                            String path = call.argument("path");
+                            boolean copiedResult1 = chonVideo.copyVideoToGallery(path);
+                            result.success(copiedResult1);
+                            break;
+                        }
+
+                        case "deleteFolder":
+                            String delId = call.argument("folderId");
+                            result.success(folderManager.deleteFolder(delId));
+                            break;
+                        case "restoreFolder":
+                            String resId = call.argument("folderId");
+                            result.success(folderManager.restoreFolder(resId));
+                            break;
+
                         default:
                             result.notImplemented();
                             break;
@@ -241,16 +338,16 @@ public class MainActivity extends FlutterActivity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQUEST_CODE_READ_MEDIA_IMAGES) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Log.d("VaultApp", "✅ Đã cấp quyền READ_MEDIA_IMAGES");
+
             } else {
-                Log.w("VaultApp", "⚠️ Người dùng từ chối quyền READ_MEDIA_IMAGES");
+
             }
         }
         if (requestCode == REQUEST_CODE_READ_MEDIA_VIDEO) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Log.d("VaultApp", "✅ Đã cấp quyền READ_MEDIA_VIDEO");
+
             } else {
-                Log.w("VaultApp", "⚠️ Người dùng từ chối quyền READ_MEDIA_VIDEO");
+
             }
         }
     }
@@ -274,5 +371,10 @@ public class MainActivity extends FlutterActivity {
             pendingPickVideoResult.success(videoUri != null ? videoUri.toString() : null);
             pendingPickVideoResult = null;
         }
+
+        if (folderManager != null) {
+            folderManager.handleActivityResult(requestCode, resultCode, data);
+        }
+
     }
 }

@@ -19,12 +19,17 @@ class _SplashScreenState extends State<SplashScreen> {
   void initState() {
     super.initState();
 
-    Future.delayed(const Duration(milliseconds: 3500), () async {
+    Future.delayed(const Duration(milliseconds: 6000), () async {
       final pin = await PinService.getPin();
 
       if (pin != null && pin.isNotEmpty) {
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const Calculator()));
-      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const Calculator(),
+            settings: RouteSettings(name: 'CalculatorScreen'),
+          ),
+        );      } else {
         Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => LanguageSelectionPage()));
       }
     });

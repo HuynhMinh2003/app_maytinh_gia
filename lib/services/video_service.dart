@@ -17,8 +17,29 @@ class HiddenVideoService {
     return false;
   }
 
-  Future<bool> restoreVideo(String path) async {
-    final success = await _platform.invokeMethod('restoreVideo', {'path': path});
-    return success == true;
+  // Future<bool> restoreVideo(String path) async {
+  //   final success = await _platform.invokeMethod('restoreVideo', {'path': path});
+  //   return success == true;
+  // }
+
+
+  Future<bool> deleteVideoInApp(String path) async {
+    final bool? success = await _platform.invokeMethod('deleteVideoInApp', {'path': path});
+    return success ?? false;
   }
+
+  Future<bool> copyVideoToGallery(String path) async {
+    final bool? success = await _platform.invokeMethod('copyVideoToGallery', {'path': path});
+    return success ?? false;
+  }
+
+
+  Future<bool> moveVideoToFolder(String videoPath, String folderId) async {
+    final result = await _platform.invokeMethod('moveVideoToFolder', {
+      'videoPath': videoPath,
+      'folderId': folderId,
+    });
+    return result == true;
+  }
+
 }

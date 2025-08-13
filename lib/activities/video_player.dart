@@ -11,19 +11,19 @@ class VideoPlayerFullScreen extends StatefulWidget {
   State<VideoPlayerFullScreen> createState() => _VideoPlayerFullScreenState();
 }
 
-class _VideoPlayerFullScreenState extends State<VideoPlayerFullScreen> {
+class _VideoPlayerFullScreenState extends State<VideoPlayerFullScreen> with WidgetsBindingObserver{
   late VideoPlayerController _controller;
   bool isFavorite = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this); // Đăng ký listener lifecycle
     _controller = VideoPlayerController.file(File(widget.videoPath))
       ..initialize().then((_) {
         setState(() {});
         _controller.play();
       });
-
     _loadFavoriteStatus();
   }
 
@@ -51,8 +51,16 @@ class _VideoPlayerFullScreenState extends State<VideoPlayerFullScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this); // Loại observer khi dispose
     _controller.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      Navigator.of(context).popUntil((route) => route.settings.name == 'CalculatorScreen');
+    }
   }
 
   @override

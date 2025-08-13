@@ -17,7 +17,7 @@ class ImageViewer extends StatefulWidget {
   State<ImageViewer> createState() => _ImageViewerState();
 }
 
-class _ImageViewerState extends State<ImageViewer> {
+class _ImageViewerState extends State<ImageViewer> with WidgetsBindingObserver{
   final _favoriteService = ImageViewService();
   late PageController _controller;
   late int _currentIndex;
@@ -26,9 +26,11 @@ class _ImageViewerState extends State<ImageViewer> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this); // Thêm observer lifecycle
     _controller = PageController(initialPage: widget.initialIndex);
     _currentIndex = widget.initialIndex;
     _loadFavoriteStatus();
+
     _controller.addListener(() {
       final newIndex = _controller.page?.round() ?? _currentIndex;
       if (newIndex != _currentIndex) {
@@ -57,8 +59,16 @@ class _ImageViewerState extends State<ImageViewer> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this); // Loại observer khi dispose
     _controller.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      Navigator.of(context).popUntil((route) => route.settings.name == 'CalculatorScreen');
+    }
   }
 
   @override

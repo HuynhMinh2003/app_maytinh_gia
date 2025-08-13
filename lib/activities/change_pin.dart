@@ -4,13 +4,14 @@ import '../l10n/app_localizations.dart';
 import '../services/pin_service.dart';
 
 class ChangePinScreen extends StatefulWidget {
-  const ChangePinScreen({Key? key}) : super(key: key);
+  final bool openedFromCalculator;
 
+  const ChangePinScreen({Key? key, this.openedFromCalculator = false}) : super(key: key);
   @override
   State<ChangePinScreen> createState() => _ChangePinScreenState();
 }
 
-class _ChangePinScreenState extends State<ChangePinScreen> {
+class _ChangePinScreenState extends State<ChangePinScreen> with WidgetsBindingObserver{
   final _oldPinController = TextEditingController();
   final _newPinController = TextEditingController();
   final _confirmPinController = TextEditingController();
@@ -79,10 +80,24 @@ class _ChangePinScreenState extends State<ChangePinScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this); // Thêm observer lifecycle
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      Navigator.of(context).popUntil((route) => route.settings.name == 'CalculatorScreen');
+    }
+  }
+
+  @override
   void dispose() {
     _oldPinController.dispose();
     _newPinController.dispose();
     _confirmPinController.dispose();
+    WidgetsBinding.instance.removeObserver(this); // Hủy listener lifecycle
     super.dispose();
   }
 

@@ -32,7 +32,7 @@ class FavoriteService {
         ));
       }
     } on PlatformException catch (e) {
-      print('Lỗi khi tải dữ liệu yêu thích: ${e.message}');
+
     }
 
     return items;

@@ -9,38 +9,66 @@ import 'video_player.dart';
 import '../services/favorite_service.dart';
 
 class FavoriteVideosScreen extends StatefulWidget {
-  const FavoriteVideosScreen({Key? key}) : super(key: key);
+  final bool openedFromCalculator;
+
+  const FavoriteVideosScreen({Key? key, this.openedFromCalculator = false}) : super(key: key);
 
   @override
   State<FavoriteVideosScreen> createState() => _FavoriteVideosScreenState();
 }
 
-class _FavoriteVideosScreenState extends State<FavoriteVideosScreen> {
+class _FavoriteVideosScreenState extends State<FavoriteVideosScreen> with WidgetsBindingObserver {
   final List<FavoriteItem> favoriteItems = [];
   final FavoriteService _favoriteService = FavoriteService();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this); // Thêm observer lifecycle
     _loadFavorites();
   }
 
   Future<void> _loadFavorites() async {
-    final items = await _favoriteService.loadFavorites();
-    setState(() {
-      favoriteItems
-        ..clear()
-        ..addAll(items);
-    });
+    try {
+      final items = await _favoriteService.loadFavorites();
+
+      final validItems = items.where((item) => File(item.path).existsSync()).toList();
+
+      if (!mounted) return;
+      setState(() {
+        favoriteItems
+          ..clear()
+          ..addAll(validItems);
+      });
+
+      // final invalidItems = items.where((item) => !File(item.path).existsSync());
+      // for (var item in invalidItems) {
+      //   await _favoriteService.removeFavorite(item.path);
+      // }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        // Xử lý lỗi nếu cần
+      });
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this); // Loại observer khi dispose
     for (var item in favoriteItems) {
       item.controller?.dispose();
     }
     super.dispose();
   }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      Navigator.of(context).popUntil((route) => route.settings.name == 'CalculatorScreen');
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {

@@ -4,6 +4,9 @@ import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteOpenHelper;
+import android.content.ContentValues;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
@@ -11,8 +14,12 @@ import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Log;
 
+import com.example.app_giau.sqlite.MetadataDatabaseHelper;
+import com.example.app_giau.modules.ImageMetadata;
+
 import java.io.*;
 import java.util.*;
+
 
 public class ChonAnh {
     public static final int REQUEST_DELETE_PERMISSION = 102;
@@ -27,21 +34,41 @@ public class ChonAnh {
     }
 
     public ArrayList<String> getHiddenImages() {
-        File vaultDir = new File(context.getFilesDir(), ".Vault/Images");
         ArrayList<String> filePaths = new ArrayList<>();
+        SQLiteDatabase db = null;
+        Cursor cursor = null;
 
-        if (vaultDir.exists()) {
-            File[] files = vaultDir.listFiles();
-            if (files != null) {
-                Arrays.sort(files, (f1, f2) -> Long.compare(f2.lastModified(), f1.lastModified()));
-                for (File file : files) {
-                    String name = file.getName().toLowerCase(Locale.ROOT);
-                    if (!file.isHidden() && file.length() > 0 && isSupportedImage(name)) {
-                        filePaths.add(file.getAbsolutePath());
+        try {
+            MetadataDatabaseHelper dbHelper = new MetadataDatabaseHelper(context);
+            db = dbHelper.getReadableDatabase();
+
+            // Lấy tất cả ảnh đang ẩn, sắp xếp theo ngày tạo mới nhất
+            cursor = db.query(
+                    "image_metadata",
+                    new String[]{"file_path"},
+                    "is_hidden = ?",
+                    new String[]{"1"},
+                    null,
+                    null,
+                    "created_at DESC"
+            );
+
+            if (cursor.moveToFirst()) {
+                do {
+                    String path = cursor.getString(cursor.getColumnIndexOrThrow("file_path"));
+                    File file = new File(path);
+
+                    // Chỉ thêm nếu file vẫn tồn tại
+                    if (file.exists() && file.length() > 0 && isSupportedImage(file.getName())) {
+                        filePaths.add(path);
                     }
-                }
+                } while (cursor.moveToNext());
             }
+        } finally {
+            if (cursor != null) cursor.close();
+            if (db != null) db.close();
         }
+
         return filePaths;
     }
 
@@ -68,33 +95,40 @@ public class ChonAnh {
 
             in = context.getContentResolver().openInputStream(uri);
             if (in == null) {
-                Log.e("VaultApp", "❌ Không thể mở InputStream từ uri: " + uri);
+
                 return false;
             }
 
             out = new FileOutputStream(outFile);
-
             byte[] buffer = new byte[1024];
             int len;
             while ((len = in.read(buffer)) > 0) {
                 out.write(buffer, 0, len);
             }
-
             out.flush();
 
-            Uri mediaStoreUri = getMediaStoreImageUriFromInput(uri);
+            // 🔹 Lưu metadata vào SQLite
+            MetadataDatabaseHelper dbHelper = new MetadataDatabaseHelper(context);
+            ImageMetadata meta = new ImageMetadata(
+                    outFile.getAbsolutePath(),
+                    filename,
+                    System.currentTimeMillis(),
+                    "", // tag mặc định rỗng
+                    true, // đang ẩn
+                    outFile.length()
+            );
+            dbHelper.insertImageMetadata(meta);
 
+            Uri mediaStoreUri = getMediaStoreImageUriFromInput(uri);
             if (mediaStoreUri != null) {
                 requestDeletePermission(mediaStoreUri);
             } else {
-                // THÊM ĐOẠN NÀY
-                // Nếu không phải ảnh MediaStore, xóa vật lý file
                 File file = new File(uri.getPath());
                 if (file.exists()) {
                     boolean deleted = file.delete();
-                    Log.d("VaultApp", "🗑️ Xóa file riêng app: " + deleted);
+
                 } else {
-                    Log.e("VaultApp", "❌ File không tồn tại: " + file.getAbsolutePath());
+
                 }
             }
 
@@ -106,7 +140,7 @@ public class ChonAnh {
             return true;
 
         } catch (Exception e) {
-            Log.e("VaultApp", "❌ Lỗi khi ẩn ảnh: " + e.getMessage(), e);
+
             return false;
 
         } finally {
@@ -119,10 +153,25 @@ public class ChonAnh {
         }
     }
 
-    public boolean restoreImage(String hiddenFilePath) {
+    // Xóa ảnh trong app (xóa file trong thư mục ẩn)
+    public boolean deleteImageInApp(String filePath) {
+        try {
+            File file = new File(filePath);
+            if (file.exists()) {
+                return file.delete();
+            } else {
+                return false;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    // Copy ảnh sang thư viện nhưng không xóa ảnh gốc
+    public boolean copyImageToGallery(String hiddenFilePath) {
         FileInputStream in = null;
         FileOutputStream out = null;
-
         try {
             File hiddenFile = new File(hiddenFilePath);
             File picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
@@ -136,19 +185,17 @@ public class ChonAnh {
             while ((len = in.read(buffer)) > 0) {
                 out.write(buffer, 0, len);
             }
-
             out.flush();
 
-            hiddenFile.delete();
+            // Không xóa file gốc
 
+            // Cập nhật media store để ảnh hiện trong thư viện
             MediaScannerConnection.scanFile(context, new String[]{restoredFile.getAbsolutePath()}, null, null);
 
             return true;
-
         } catch (Exception e) {
-            Log.e("VaultApp", "❌ Lỗi khi khôi phục ảnh: " + e.getMessage(), e);
+            e.printStackTrace();
             return false;
-
         } finally {
             try {
                 if (in != null) in.close();
@@ -166,28 +213,25 @@ public class ChonAnh {
 
             if ("content".equals(scheme)) {
                 int deleted = context.getContentResolver().delete(uri, null, null);
-                Log.d("VaultApp", "🗑️ Xoá ảnh qua MediaStore, deleted = " + deleted);
+
                 if (deleted == 0) {
-                    Log.e("VaultApp", "❌ Không xoá được ảnh qua MediaStore");
+
                 }
             } else {
                 File file = new File(uri.getPath());
                 if (file.exists()) {
                     boolean result = file.delete();
-                    Log.d("VaultApp", "🗑️ Xoá ảnh vật lý: " + result);
+
                 } else {
-                    Log.e("VaultApp", "❌ File không tồn tại: " + file.getAbsolutePath());
+
                 }
             }
 
         } catch (Exception e) {
-            Log.e("VaultApp", "❌ Lỗi khi xoá ảnh: " + e.getMessage(), e);
+
         }
     }
 
-    /**
-     * ĐÂY LÀ HÀM QUAN TRỌNG: Tìm đúng MediaStore URI từ input (uri lấy từ Intent, hoặc từ file)
-     */
     private Uri getMediaStoreImageUriFromInput(Uri inputUri) {
         String scheme = inputUri.getScheme();
         if ("content".equals(scheme)) {
@@ -243,7 +287,7 @@ public class ChonAnh {
     private void requestDeletePermission(Uri mediaStoreUri) {
         try {
             if (mediaStoreUri == null) {
-                Log.e("VaultApp", "❌ mediaStoreUri null khi yêu cầu xóa");
+
                 return;
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -264,16 +308,16 @@ public class ChonAnh {
                 context.getContentResolver().delete(mediaStoreUri, null, null);
             }
         } catch (Exception e) {
-            Log.e("VaultApp", "❌ Lỗi khi gửi yêu cầu xoá qua MediaStore: " + e.getMessage(), e);
+
         }
     }
 
     public static void handleDeletePermissionResult(Context context, int resultCode) {
         if (resultCode == Activity.RESULT_OK && uriPendingDelete != null) {
-            Log.d("VaultApp", "✅ Người dùng cho phép xoá ảnh");
+
             // KHÔNG cần gọi lại deleteOriginalImage(uriPendingDelete) nữa! Ảnh đã được hệ thống xóa.
         } else {
-            Log.w("VaultApp", "❌ Người dùng từ chối quyền xóa ảnh hoặc uri null");
+
         }
         uriPendingDelete = null;
     }
@@ -340,5 +384,6 @@ public class ChonAnh {
         }
         return null;
     }
+
 
 }

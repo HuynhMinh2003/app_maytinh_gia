@@ -1,6 +1,7 @@
 // rate_dialog_content.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_svg/svg.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/rate_service.dart';
@@ -38,13 +39,29 @@ class _RateScreenState extends State<RateScreen> {
   }
 
   @override
+  void dispose() {
+    super.dispose();
+  }
+
+
+  @override
   Widget build(BuildContext context) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        SvgPicture.asset(
+          'assets/picture/star.svg',
+          width: 100,
+          height: 100,
+        ),
+        Text(
+          AppLocalizations.of(context)!.title_rate,
+          style: TextStyle(fontSize: 20.sp,color: Colors.black, fontWeight: FontWeight.bold),
+        ),
+        SizedBox(height: 10.h),
         Text(
           AppLocalizations.of(context)!.content_rate,
-          style: TextStyle(fontSize: 15.sp),
+          style: TextStyle(fontSize: 15.sp,color:Colors.grey),
         ),
         SizedBox(height: 10.h),
         Row(
@@ -64,10 +81,17 @@ class _RateScreenState extends State<RateScreen> {
           }),
         ),
         SizedBox(height: 10.h),
-        ElevatedButton(
-          onPressed: _submitRating,
-          child: Text(AppLocalizations.of(context)!.rated, style: TextStyle(color:Colors.black, fontSize: 15.sp)),
-        )
+        Row(mainAxisAlignment: MainAxisAlignment.spaceAround,children: [
+          TextButton(
+            onPressed: (){Navigator.of(context,rootNavigator: true).pop();},
+            child: Text(AppLocalizations.of(context)!.cancel, style: TextStyle(color:Colors.black, fontSize: 15.sp)),
+          ),
+          ElevatedButton(
+            onPressed: _submitRating,
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            child: Text(AppLocalizations.of(context)!.rated, style: TextStyle(color:Colors.white, fontSize: 15.sp)),
+          )
+        ],)
       ],
     );
   }

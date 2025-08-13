@@ -3,6 +3,7 @@ import 'package:app_giau/services/nhap_pin_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:app_giau/l10n/app_localizations.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class NhapPinScreen extends StatelessWidget {
   final NhapPinService service = NhapPinService();
@@ -64,16 +65,23 @@ class NhapPinScreen extends StatelessWidget {
                 width: double.infinity,
                 height: 60.h,
                 child: ElevatedButton(
-                  onPressed: () async {
-                    final result = await service.confirmPin(
-                      context,
-                      pin1Controller.text.trim(),
-                      pin2Controller.text.trim(),
-                    );
-                    if (result) {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => Calculator()));
-                    }
-                  },
+                    onPressed: () async {
+                      final result = await service.confirmPin(
+                        context,
+                        pin1Controller.text.trim(),
+                        pin2Controller.text.trim(),
+                      );
+                      if (result) {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const Calculator(),
+                            settings: RouteSettings(name: 'CalculatorScreen'),
+                          ),
+                        );
+
+                      }
+                    },
                   child: Text(AppLocalizations.of(context)!.confirm,
                     style: TextStyle(
                     fontSize: 30.sp,

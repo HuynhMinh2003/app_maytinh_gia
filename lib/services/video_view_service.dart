@@ -10,7 +10,7 @@ class VideoViewService {
         'videoPath': videoPath,
       });
     } on PlatformException catch (e) {
-      print("Lỗi khi kiểm tra yêu thích: ${e.message}");
+
       return false;
     }
   }
@@ -22,7 +22,7 @@ class VideoViewService {
         'videoPath': videoPath,
       });
     } on PlatformException catch (e) {
-      print("Lỗi khi đổi trạng thái yêu thích: ${e.message}");
+
       return false;
     }
   }

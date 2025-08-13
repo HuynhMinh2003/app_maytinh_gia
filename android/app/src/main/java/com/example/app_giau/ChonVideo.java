@@ -4,12 +4,16 @@ import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Log;
+
+import com.example.app_giau.sqlite.MetadataDatabaseHelper;
+import com.example.app_giau.modules.VideoMetadata;
 
 import java.io.*;
 import java.util.*;
@@ -20,28 +24,49 @@ public class ChonVideo {
 
     private final Context context;
 
-    private static final List<String> SUPPORTED_VIDEO_EXTENSIONS = Arrays.asList(".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm", ".3gp");
+    private static final List<String> SUPPORTED_VIDEO_EXTENSIONS = Arrays.asList(
+            ".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm", ".3gp"
+    );
 
     public ChonVideo(Context context) {
         this.context = context;
     }
 
+    /** Lấy danh sách video ẩn từ SQLite */
     public ArrayList<String> getHiddenVideos() {
-        File vaultDir = new File(context.getFilesDir(), ".Vault/Videos");
         ArrayList<String> filePaths = new ArrayList<>();
+        SQLiteDatabase db = null;
+        Cursor cursor = null;
 
-        if (vaultDir.exists()) {
-            File[] files = vaultDir.listFiles();
-            if (files != null) {
-                Arrays.sort(files, (f1, f2) -> Long.compare(f2.lastModified(), f1.lastModified()));
-                for (File file : files) {
-                    String name = file.getName().toLowerCase(Locale.ROOT);
-                    if (!file.isHidden() && file.length() > 0 && isSupportedVideo(name)) {
-                        filePaths.add(file.getAbsolutePath());
+        try {
+            MetadataDatabaseHelper dbHelper = new MetadataDatabaseHelper(context);
+            db = dbHelper.getReadableDatabase();
+
+            cursor = db.query(
+                    "video_metadata",
+                    new String[]{"file_path"},
+                    "is_hidden = ?",
+                    new String[]{"1"},
+                    null,
+                    null,
+                    "created_at DESC"
+            );
+
+            if (cursor.moveToFirst()) {
+                do {
+                    String path = cursor.getString(cursor.getColumnIndexOrThrow("file_path"));
+                    File file = new File(path);
+
+                    if (file.exists() && file.length() > 0 && isSupportedVideo(file.getName().toLowerCase(Locale.ROOT))) {
+                        filePaths.add(path);
                     }
-                }
+                } while (cursor.moveToNext());
             }
+        } finally {
+            if (cursor != null) cursor.close();
+            if (db != null) db.close();
         }
+
         return filePaths;
     }
 
@@ -52,6 +77,7 @@ public class ChonVideo {
         return false;
     }
 
+    /** Ẩn video */
     public boolean hideVideo(Uri uri) {
         InputStream in = null;
         FileOutputStream out = null;
@@ -68,31 +94,40 @@ public class ChonVideo {
 
             in = context.getContentResolver().openInputStream(uri);
             if (in == null) {
-                Log.e("VaultApp", "❌ Không thể mở InputStream từ uri: " + uri);
+
                 return false;
             }
 
             out = new FileOutputStream(outFile);
-
             byte[] buffer = new byte[4096];
             int len;
             while ((len = in.read(buffer)) > 0) {
                 out.write(buffer, 0, len);
             }
-
             out.flush();
 
-            Uri mediaStoreUri = getMediaStoreVideoUriFromInput(uri);
+            // 🔹 Lưu metadata vào SQLite
+            MetadataDatabaseHelper dbHelper = new MetadataDatabaseHelper(context);
+            VideoMetadata meta = new VideoMetadata(
+                    outFile.getAbsolutePath(),
+                    filename,
+                    System.currentTimeMillis(),
+                    "", // tag mặc định
+                    true, // đang ẩn
+                    outFile.length()
+            );
+            dbHelper.insertVideoMetadata(meta);
 
+            Uri mediaStoreUri = getMediaStoreVideoUriFromInput(uri);
             if (mediaStoreUri != null) {
                 requestDeletePermission(mediaStoreUri);
             } else {
                 File file = new File(uri.getPath());
                 if (file.exists()) {
                     boolean deleted = file.delete();
-                    Log.d("VaultApp", "🗑️ Xóa file riêng app: " + deleted);
+
                 } else {
-                    Log.e("VaultApp", "❌ File không tồn tại: " + file.getAbsolutePath());
+
                 }
             }
 
@@ -104,7 +139,7 @@ public class ChonVideo {
             return true;
 
         } catch (Exception e) {
-            Log.e("VaultApp", "❌ Lỗi khi ẩn video: " + e.getMessage(), e);
+
             return false;
 
         } finally {
@@ -117,10 +152,73 @@ public class ChonVideo {
         }
     }
 
-    public boolean restoreVideo(String hiddenFilePath) {
+//    /** Khôi phục video */
+//    public boolean restoreVideo(String hiddenFilePath) {
+//        FileInputStream in = null;
+//        FileOutputStream out = null;
+//
+//        try {
+//            File hiddenFile = new File(hiddenFilePath);
+//            File moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
+//            File restoredFile = new File(moviesDir, hiddenFile.getName());
+//
+//            in = new FileInputStream(hiddenFile);
+//            out = new FileOutputStream(restoredFile);
+//
+//            byte[] buffer = new byte[4096];
+//            int len;
+//            while ((len = in.read(buffer)) > 0) {
+//                out.write(buffer, 0, len);
+//            }
+//            out.flush();
+//
+//            hiddenFile.delete();
+//
+//            // 🔹 Cập nhật SQLite: đánh dấu là không ẩn
+//            MetadataDatabaseHelper dbHelper = new MetadataDatabaseHelper(context);
+//            dbHelper.updateVideoHiddenStatus(hiddenFilePath, false);
+//
+//            MediaScannerConnection.scanFile(context, new String[]{restoredFile.getAbsolutePath()}, null, null);
+//
+//            return true;
+//
+//        } catch (Exception e) {
+//
+//            return false;
+//
+//        } finally {
+//            try {
+//                if (in != null) in.close();
+//                if (out != null) out.close();
+//            } catch (IOException e) {
+//                e.printStackTrace();
+//            }
+//        }
+//    }
+
+    public boolean deleteVideoInApp(String path) {
+        try {
+            // Ví dụ: xoá file ẩn trong app (hoặc đánh dấu hidden = false trong DB)
+            MetadataDatabaseHelper dbHelper = new MetadataDatabaseHelper(context);
+            boolean updated = dbHelper.updateVideoHiddenStatus(path, true) > 0;
+
+            // Hoặc nếu lưu file riêng thì xoá file ở folder app
+            File file = new File(path);
+            if (file.exists()) {
+                return file.delete();
+            }
+
+            return updated;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    // Tải video về thư viện (copy file từ thư mục ẩn về Movies)
+    public boolean copyVideoToGallery(String hiddenFilePath) {
         FileInputStream in = null;
         FileOutputStream out = null;
-
         try {
             File hiddenFile = new File(hiddenFilePath);
             File moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
@@ -134,19 +232,15 @@ public class ChonVideo {
             while ((len = in.read(buffer)) > 0) {
                 out.write(buffer, 0, len);
             }
-
             out.flush();
-
-            hiddenFile.delete();
 
             MediaScannerConnection.scanFile(context, new String[]{restoredFile.getAbsolutePath()}, null, null);
 
             return true;
 
         } catch (Exception e) {
-            Log.e("VaultApp", "❌ Lỗi khi khôi phục video: " + e.getMessage(), e);
+            e.printStackTrace();
             return false;
-
         } finally {
             try {
                 if (in != null) in.close();
@@ -209,7 +303,7 @@ public class ChonVideo {
     private void requestDeletePermission(Uri mediaStoreUri) {
         try {
             if (mediaStoreUri == null) {
-                Log.e("VaultApp", "❌ mediaStoreUri null khi yêu cầu xóa video");
+
                 return;
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -230,15 +324,15 @@ public class ChonVideo {
                 context.getContentResolver().delete(mediaStoreUri, null, null);
             }
         } catch (Exception e) {
-            Log.e("VaultApp", "❌ Lỗi khi gửi yêu cầu xoá qua MediaStore: " + e.getMessage(), e);
+
         }
     }
 
     public static void handleDeletePermissionResult(Context context, int resultCode) {
         if (resultCode == Activity.RESULT_OK && uriPendingDelete != null) {
-            Log.d("VaultApp", "✅ Người dùng cho phép xoá video");
+
         } else {
-            Log.w("VaultApp", "❌ Người dùng từ chối quyền xóa video hoặc uri null");
+
         }
         uriPendingDelete = null;
     }

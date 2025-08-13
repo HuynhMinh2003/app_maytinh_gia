@@ -2,6 +2,7 @@ import 'package:app_giau/services/calculator_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:auto_size_text/auto_size_text.dart';
 
 import '../custom/calculator_button.dart';
 import '../l10n/app_localizations.dart';
@@ -32,13 +33,20 @@ class _CalculatorState extends State<Calculator> {
   Future<void> onEqual() async {
     try {
       if (await controller.checkPin()) {
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => ChonFile()));
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => ChonFile(openedFromCalculator: true),
+          settings: RouteSettings(name: 'ChonFile'),
+        ));
         setState(() {
           controller.clear();
         });
       } else {
         await controller.evaluate();
-        setState(() {});
+        setState(() {
+          // Nếu muốn show kết quả luôn trên input thì:
+          controller.input = controller.result;
+          controller.result = '';
+        });
       }
     } catch (_) {
       setState(() {
@@ -59,26 +67,27 @@ class _CalculatorState extends State<Calculator> {
 
     return Scaffold(
       backgroundColor: Colors.black,
+      resizeToAvoidBottomInset: false, // Chặn UI bị đẩy
       body: Stack(
         children: [
           Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
+            top: 200.h,
+            right: 30.w,      // padding phải 30
+            left: 30.w,       // padding trái 30
             bottom: MediaQuery.of(context).size.height * 0.4,
-            child: SingleChildScrollView(
-              padding: EdgeInsets.symmetric(horizontal: 30.w),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  SizedBox(height: 80.h),
-                  Text(controller.input, style: TextStyle(fontSize: 50.sp, color: Colors.white)),
-                  SizedBox(height: 10.h),
-                  Text(controller.result, style: TextStyle(fontSize: 50.sp, color: Colors.white)),
-                ],
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: AutoSizeText(
+                controller.input,
+                style: TextStyle(fontSize: 50.sp, color: Colors.white),
+                maxLines: 1,
+                minFontSize: 20.sp,
+                maxFontSize: 50.sp,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
+
           Positioned(
             bottom: 0,
             left: 0,
@@ -94,19 +103,23 @@ class _CalculatorState extends State<Calculator> {
                     runSpacing: 20,
                     children: keys.map((e) => CalculatorButton(
                       label: e,
-                      onPressed: () {
-                        setState(() {
+                        onPressed: () async {
                           if (e == '=') {
-                            onEqual();
+                            await onEqual(); // onEqual sẽ gọi evaluate()
+                            setState(() {});
                           } else if (e == 'C') {
-                            controller.clear();
+                            setState(() {
+                              controller.clear();
+                            });
                           } else if (e == '[X]') {
-                            controller.backspace();
+                            setState(() {
+                              controller.backspace();
+                            });
                           } else {
-                            controller.pressKey(e);
+                            await controller.pressKey(e);
+                            setState(() {});
                           }
-                        });
-                      },
+                        }
                     )).toList(),
                   ),
                 ),

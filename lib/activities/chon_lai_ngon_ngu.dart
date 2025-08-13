@@ -5,13 +5,14 @@ import '../l10n/app_localizations.dart';
 import '../services/language_service.dart';
 
 class LanguageSelectionAgainPage extends StatefulWidget {
-  const LanguageSelectionAgainPage({super.key});
+  final bool openedFromCalculator;
 
+  const LanguageSelectionAgainPage({Key? key, this.openedFromCalculator = false}) : super(key: key);
   @override
   State<LanguageSelectionAgainPage> createState() => _LanguageSelectionAgainPageState();
 }
 
-class _LanguageSelectionAgainPageState extends State<LanguageSelectionAgainPage> {
+class _LanguageSelectionAgainPageState extends State<LanguageSelectionAgainPage> with WidgetsBindingObserver{
   final LanguageService _controller = LanguageService();
 
   final List<Map<String, String>> languages = const [
@@ -26,8 +27,23 @@ class _LanguageSelectionAgainPageState extends State<LanguageSelectionAgainPage>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this); // Thêm observer lifecycle
     _initLanguage();
   }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this); // Loại observer khi dispose
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      Navigator.of(context).popUntil((route) => route.settings.name == 'CalculatorScreen');
+    }
+  }
+
 
   Future<void> _initLanguage() async {
     final prefs = await SharedPreferences.getInstance();
